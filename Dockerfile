@@ -13,6 +13,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
+EXPOSE 8080
+
 # We do not need the Rust toolchain to run the binary!
 FROM debian:buster-slim AS runtime
 WORKDIR /app
