@@ -7,7 +7,7 @@ use purchase_json::{state::create_appstate, accounts::AccountsApi};
 #[tokio::main]
 async fn main() -> Result<()> {
     create_appstate().await?;
-    let all_endpoins = (AccountsApi);
+    let all_endpoins = AccountsApi;
     let api_service = OpenApiService::new(all_endpoins, "Purchase Api", "1.0");
     let ui = api_service.openapi_explorer();
     let app = Route::new().nest("/", api_service).nest("/docs", ui);
