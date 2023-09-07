@@ -1,22 +1,9 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
-WORKDIR /app
-
-FROM chef AS planner
+FROM rust:latest as builder
+WORKDIR /usr/src/purchase-json
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN cargo install --path .
 
-FROM chef AS builder 
-COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
-# Build application
-COPY . .
-RUN cargo build --release
-
-EXPOSE 8080
-
-# We do not need the Rust toolchain to run the binary!
-FROM debian:buster-slim AS runtime
-WORKDIR /app
-COPY --from=builder /app/target/release/purchase-json /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/purchase-json"]
+FROM debian:bullseye-slim
+RUN apt-get update && apt-get install -y extra-runtime-dependencies && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/cargo/bin/purchase-json /usr/local/bin/purchase-json
+ENTRYPOINT ["purchase-json"]
