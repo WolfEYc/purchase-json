@@ -20,7 +20,7 @@ async fn create_pool() -> Result<PgPool>  {
 }
 
 pub async fn create_appstate() -> Result<()> {
-    dotenvy::dotenv()?;
+    _ = dotenvy::dotenv();
     Ok(STATE.set(AppState {
         db: create_pool().await?,
     })?)
