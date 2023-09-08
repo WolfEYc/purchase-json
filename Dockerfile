@@ -16,4 +16,4 @@ EXPOSE 8080
 
 COPY --from=builder /app/src/target/release/purchase-json /app/purchase-json
 
-CMD ["/app/purchase-json"]
+ENTRYPOINT ["/app/purchase-json"]
