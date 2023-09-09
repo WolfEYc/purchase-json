@@ -1,14 +1,13 @@
 use poem_openapi::{OpenApi, payload::Json, Object};
-use serde::Deserialize;
 use sqlx::{types::chrono::NaiveDate, FromRow, QueryBuilder, Postgres, Execute};
-use poem::{Result, http::StatusCode, web::Form};
+use poem::{Result, http::StatusCode};
 use crate::state::state;
 
 pub struct AccountsApi;
 #[OpenApi]
 impl AccountsApi {
     #[oai(path = "/account", method = "post")]
-    async fn read(&self, Form(filter): Form<Filter>) -> Result<Json<Vec<Account>>> {
+    async fn read(&self, Json(filter): Json<Filter>) -> Result<Json<Vec<Account>>> {
         let accounts = read(filter).await
             .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
 
@@ -32,7 +31,7 @@ pub struct Account {
     pub account_number: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Object)]
 pub struct Filter {
     pub account_number: Option<i64>,
     pub mobile_number: Option<i64>,
