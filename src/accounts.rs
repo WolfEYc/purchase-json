@@ -2,7 +2,9 @@ use poem_openapi::{OpenApi, payload::Json, Object};
 use sqlx::{types::chrono::NaiveDate, FromRow, QueryBuilder, Postgres, Execute};
 use poem::{Result, http::StatusCode};
 use crate::state::state;
+use tracing::info;
 
+#[derive(Debug)]
 pub struct AccountsApi;
 #[OpenApi]
 impl AccountsApi {
@@ -37,7 +39,7 @@ pub struct Filter {
     pub mobile_number: Option<i64>,
     pub email_address: Option<String>,
     pub ssn: Option<i32>,
-    pub dob: Option<i64>,
+    pub dob: Option<NaiveDate>,
     pub zip: Option<i32>,
     pub account_state: Option<String>,
     pub city: Option<String>,
@@ -53,7 +55,7 @@ pub async fn read(filter: Filter) -> Result<Vec<Account>, sqlx::Error> {
     if let Some(account_number) = filter.account_number {
         query.push("account_number = ").push_bind(account_number);
         let query = query.build_query_as();
-        println!("{:?}", query.sql());
+        info!("{:?}", query.sql());
 
         let results = query.fetch_all(&state().db).await?;
         return Ok(results);
@@ -73,30 +75,35 @@ pub async fn read(filter: Filter) -> Result<Vec<Account>, sqlx::Error> {
         seperated.push("mobile_number LIKE ").push_bind_unseparated(mobile_number.to_string()).push_unseparated(" || '%'");
     }
     if let Some(email_address) = &filter.email_address {
-        seperated.push("email_address LIKE '%' || ").push_bind_unseparated(email_address).push_unseparated(" || '%'");
+        seperated.push("LOWER(email_address) LIKE '%' || ").push_bind_unseparated(email_address.to_lowercase()).push_unseparated(" || '%'");
     }
     if let Some(ssn) = &filter.ssn {
         seperated.push("ssn LIKE '%' || ").push_bind_unseparated(ssn.to_string()).push_unseparated(" || '%'");
     }
     if let Some(city) = &filter.city {
-        seperated.push("city LIKE '%' || ").push_bind_unseparated(city).push_unseparated(" || '%'");
+        seperated.push("LOWER(city) LIKE '%' || ").push_bind_unseparated(city.to_lowercase()).push_unseparated(" || '%'");
     }
     if let Some(street_address) = &filter.street_address {
-        seperated.push("street_address LIKE '%' || ").push_bind_unseparated(street_address).push_unseparated("|| '%'");
+        seperated.push("LOWER(street_address) LIKE '%' || ").push_bind_unseparated(street_address.to_lowercase()).push_unseparated("|| '%'");
     }
     if let Some(last_name) = &filter.last_name {
-        seperated.push("last_name LIKE ").push_bind_unseparated(last_name).push_unseparated(" || '%'");
+        seperated.push("LOWER(last_name) LIKE ").push_bind_unseparated(last_name.to_lowercase()).push_unseparated(" || '%'");
     }
     if let Some(first_name) = &filter.first_name {
-        seperated.push("first_name LIKE ").push_bind_unseparated(first_name).push_unseparated(" || '%'");
+        seperated.push("LOWER(first_name) LIKE ").push_bind_unseparated(first_name.to_lowercase()).push_unseparated(" || '%'");
+    }
+    if query.sql().ends_with("WHERE ") {
+        query = QueryBuilder::new("SELECT * FROM account ");
     }
     if let Some(dob) = &filter.dob {
-        query.push("\nORDER BY ABS(EXTRACT(EPOCH FROM dob - ").push_bind(dob).push("::timestamp))");
+        query.push("ORDER BY ABS(dob - ").push_bind(dob).push(")");
+    } else if query.sql().ends_with("account ") {
+        query.push("ORDER BY last_name");
     }
     query.push(" LIMIT 10");
 
     let query = query.build_query_as();
-    println!("{:?}", query.sql());
+    info!("{:?}", query.sql());
 
     let results = query
         .fetch_all(&state().db)
