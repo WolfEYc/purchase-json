@@ -9,7 +9,7 @@ pub struct AccountsApi;
 #[OpenApi]
 impl AccountsApi {
     #[oai(path = "/account", method = "post")]
-    async fn read(&self, Json(filter): Json<Filter>) -> Result<Json<Vec<Account>>> {
+    async fn read(&self, Json(filter): Json<AccountFilter>) -> Result<Json<Vec<Account>>> {
         let accounts = read(filter).await
             .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
 
@@ -34,7 +34,7 @@ pub struct Account {
 }
 
 #[derive(Debug, Object)]
-pub struct Filter {
+pub struct AccountFilter {
     pub account_number: Option<i64>,
     pub mobile_number: Option<i64>,
     pub email_address: Option<String>,
@@ -49,7 +49,7 @@ pub struct Filter {
     pub last_name: Option<String>,
 }
 
-pub async fn read(filter: Filter) -> Result<Vec<Account>, sqlx::Error> {
+pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
     let mut query: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM account WHERE ");
 
     if let Some(account_number) = filter.account_number {
