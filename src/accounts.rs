@@ -1,7 +1,7 @@
 use poem_openapi::{OpenApi, payload::Json, Object};
 use sqlx::{types::chrono::NaiveDate, FromRow, QueryBuilder, Postgres, Execute};
 use poem::{Result, http::StatusCode};
-use crate::state::state;
+use crate::{state::state, PAGE_SIZE};
 use tracing::info;
 
 #[derive(Debug)]
@@ -47,6 +47,7 @@ pub struct AccountFilter {
     pub street_address: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
+    pub page: i64
 }
 
 pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
@@ -95,12 +96,16 @@ pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
     if query.sql().ends_with("WHERE ") {
         query = QueryBuilder::new("SELECT * FROM account ");
     }
+
+    query.push(" ORDER BY ");
+    let mut seperated = query.separated(", ");
     if let Some(dob) = &filter.dob {
-        query.push("ORDER BY ABS(dob - ").push_bind(dob).push(")");
-    } else if query.sql().ends_with("account ") {
-        query.push("ORDER BY last_name");
+        seperated.push("ABS(dob - ").push_bind_unseparated(dob).push_unseparated(") ASC");
     }
-    query.push(" LIMIT 10");
+    if query.sql().ends_with("ORDER BY ") {
+        query.push("last_name ASC");
+    }
+    query.push(format!(" LIMIT {} OFFSET ", PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as();
     info!("{:?}", query.sql());
