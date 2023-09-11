@@ -1,7 +1,7 @@
 use poem_openapi::{OpenApi, payload::Json, Object};
 use serde::Deserialize;
 use sqlx::{types::chrono::NaiveDate, FromRow, QueryBuilder, Postgres, Execute};
-use poem::{Result, http::StatusCode, web::Form};
+use poem::{Result, Request, error::BadRequest};
 use crate::{state::state, PAGE_SIZE};
 use tracing::info;
 
@@ -9,12 +9,13 @@ use tracing::info;
 pub struct AccountsApi;
 #[OpenApi]
 impl AccountsApi {
-    #[oai(path = "/account", method = "post")]
-    async fn read(&self, Form(filter): Form<AccountFilter>) -> Result<Json<Vec<Account>>> {
+    #[oai(path = "/account", method = "get")]
+    async fn read(&self, req: &Request) -> Result<Json<Vec<Account>>> {
+        let filter = req.params::<AccountFilter>()?;
         let accounts = read(filter).await
-            .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
+            .map_err(BadRequest)?;
 
-        Ok(Json(accounts))
+       Ok(Json(accounts))
     }
 }
 

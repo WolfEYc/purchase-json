@@ -1,7 +1,7 @@
 use poem_openapi::{OpenApi, payload::Json, Object};
 use serde::Deserialize;
 use sqlx::{types::{chrono::{NaiveDate, NaiveDateTime}, BigDecimal}, FromRow, QueryBuilder, Postgres, Execute};
-use poem::{Result, http::StatusCode, web::Form};
+use poem::{Result, http::StatusCode, Request};
 use crate::{state::state, PAGE_SIZE};
 use tracing::info;
 
@@ -9,8 +9,9 @@ use tracing::info;
 pub struct PurchasesApi;
 #[OpenApi]
 impl PurchasesApi {
-    #[oai(path = "/purchase", method = "post")]
-    async fn read(&self, Form(filter): Form<PurchaseFilter>) -> Result<Json<Vec<Purchase>>> {
+    #[oai(path = "/purchase", method = "get")]
+    async fn read(&self, req: &Request) -> Result<Json<Vec<Purchase>>> {
+        let filter = req.params::<PurchaseFilter>()?;
         let purchases = read(filter).await
             .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
 
