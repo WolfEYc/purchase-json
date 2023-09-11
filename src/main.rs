@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use poem::{listener::TcpListener, Route, Server, EndpointExt, middleware::Cors};
+use poem::{listener::TcpListener, Route, Server, EndpointExt, middleware::{Cors, SetHeader}, http::{header::CACHE_CONTROL, HeaderValue}};
 use poem_openapi::OpenApiService;
 use color_eyre::Result;
 use purchase_json::{state::create_appstate, accounts::AccountsApi, purchases::PurchasesApi};
@@ -13,6 +13,7 @@ async fn main() -> Result<()> {
     let app = Route::new()
 		.nest("/", api_service)
 		.nest("/docs", ui)
+		.with(SetHeader::new().overriding(CACHE_CONTROL, HeaderValue::from_static("public, max-age=3600")))
 		.with(Cors::new());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
