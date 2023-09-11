@@ -72,7 +72,8 @@ pub struct PurchaseFilter {
     pub merchant_name: Option<String>,
     pub merchant_state: Option<String>,
     pub merchant_category_code: Option<i16>,
-    pub page: i64
+    pub page: i64,
+	pub lookahead: i64
 }
 
 pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
@@ -117,7 +118,7 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
         query.push("purchase_datetime DESC");
     }
 
-    query.push(format!(" LIMIT {} OFFSET ", PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
+    query.push(format!(" LIMIT {} OFFSET ", filter.lookahead * PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as::<PurchaseRow>();
     info!("{:?}", query.sql());
