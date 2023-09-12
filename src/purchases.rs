@@ -118,7 +118,7 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
         query.push("purchase_datetime DESC");
     }
 
-    query.push(format!(" LIMIT {} OFFSET ", filter.lookahead * PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
+    query.push(format!(" LIMIT {} OFFSET ", (filter.lookahead + 1) * PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as::<PurchaseRow>();
     info!("{:?}", query.sql());
