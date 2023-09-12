@@ -1,8 +1,8 @@
-use poem_openapi::{OpenApi, payload::Json, Object};
-use serde::Deserialize;
-use sqlx::{types::chrono::NaiveDate, FromRow, QueryBuilder, Postgres, Execute};
-use poem::{Result, Request, error::BadRequest};
 use crate::{state::state, PAGE_SIZE};
+use poem::{error::BadRequest, Request, Result};
+use poem_openapi::{payload::Json, Object, OpenApi};
+use serde::Deserialize;
+use sqlx::{types::chrono::NaiveDate, Execute, FromRow, Postgres, QueryBuilder};
 use tracing::info;
 
 #[derive(Debug)]
@@ -12,10 +12,9 @@ impl AccountsApi {
     #[oai(path = "/account", method = "get")]
     async fn read(&self, req: &Request) -> Result<Json<Vec<Account>>> {
         let filter = req.params::<AccountFilter>()?;
-        let accounts = read(filter).await
-            .map_err(BadRequest)?;
+        let accounts = read(filter).await.map_err(BadRequest)?;
 
-       Ok(Json(accounts))
+        Ok(Json(accounts))
     }
 }
 
@@ -49,7 +48,8 @@ pub struct AccountFilter {
     pub street_address: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub page: i64
+    pub page: i64,
+    pub lookahead: i64,
 }
 
 pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
@@ -69,31 +69,56 @@ pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
         seperated.push("zip = ").push_bind_unseparated(zip);
     }
     if let Some(unit) = &filter.unit {
-        seperated.push("unit = ").push_bind_unseparated(*unit as i16);
+        seperated
+            .push("unit = ")
+            .push_bind_unseparated(*unit as i16);
     }
     if let Some(account_state) = &filter.account_state {
-        seperated.push("account_state = ").push_bind_unseparated(account_state);
+        seperated
+            .push("account_state = ")
+            .push_bind_unseparated(account_state);
     }
     if let Some(mobile_number) = filter.mobile_number {
-        seperated.push("mobile_number LIKE ").push_bind_unseparated(mobile_number.to_string()).push_unseparated(" || '%'");
+        seperated
+            .push("mobile_number LIKE ")
+            .push_bind_unseparated(mobile_number.to_string())
+            .push_unseparated(" || '%'");
     }
     if let Some(email_address) = &filter.email_address {
-        seperated.push("LOWER(email_address) LIKE '%' || ").push_bind_unseparated(email_address.to_lowercase()).push_unseparated(" || '%'");
+        seperated
+            .push("LOWER(email_address) LIKE '%' || ")
+            .push_bind_unseparated(email_address.to_lowercase())
+            .push_unseparated(" || '%'");
     }
     if let Some(ssn) = &filter.ssn {
-        seperated.push("ssn LIKE '%' || ").push_bind_unseparated(ssn.to_string()).push_unseparated(" || '%'");
+        seperated
+            .push("ssn LIKE '%' || ")
+            .push_bind_unseparated(ssn.to_string())
+            .push_unseparated(" || '%'");
     }
     if let Some(city) = &filter.city {
-        seperated.push("LOWER(city) LIKE '%' || ").push_bind_unseparated(city.to_lowercase()).push_unseparated(" || '%'");
+        seperated
+            .push("LOWER(city) LIKE '%' || ")
+            .push_bind_unseparated(city.to_lowercase())
+            .push_unseparated(" || '%'");
     }
     if let Some(street_address) = &filter.street_address {
-        seperated.push("LOWER(street_address) LIKE '%' || ").push_bind_unseparated(street_address.to_lowercase()).push_unseparated("|| '%'");
+        seperated
+            .push("LOWER(street_address) LIKE '%' || ")
+            .push_bind_unseparated(street_address.to_lowercase())
+            .push_unseparated("|| '%'");
     }
     if let Some(last_name) = &filter.last_name {
-        seperated.push("LOWER(last_name) LIKE ").push_bind_unseparated(last_name.to_lowercase()).push_unseparated(" || '%'");
+        seperated
+            .push("LOWER(last_name) LIKE ")
+            .push_bind_unseparated(last_name.to_lowercase())
+            .push_unseparated(" || '%'");
     }
     if let Some(first_name) = &filter.first_name {
-        seperated.push("LOWER(first_name) LIKE ").push_bind_unseparated(first_name.to_lowercase()).push_unseparated(" || '%'");
+        seperated
+            .push("LOWER(first_name) LIKE ")
+            .push_bind_unseparated(first_name.to_lowercase())
+            .push_unseparated(" || '%'");
     }
     if query.sql().ends_with("WHERE ") {
         query = QueryBuilder::new("SELECT * FROM account ");
@@ -102,19 +127,25 @@ pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
     query.push(" ORDER BY ");
     let mut seperated = query.separated(", ");
     if let Some(dob) = &filter.dob {
-        seperated.push("ABS(dob - ").push_bind_unseparated(dob).push_unseparated(") ASC");
+        seperated
+            .push("ABS(dob - ")
+            .push_bind_unseparated(dob)
+            .push_unseparated(") ASC");
     }
     if query.sql().ends_with("ORDER BY ") {
         query.push("last_name ASC");
     }
-    query.push(format!(" LIMIT {} OFFSET ", PAGE_SIZE)).push_bind(filter.page * PAGE_SIZE);
+    query
+        .push(format!(
+            " LIMIT {} OFFSET ",
+            (filter.lookahead + 1) * PAGE_SIZE
+        ))
+        .push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as();
     info!("{:?}", query.sql());
 
-    let results = query
-        .fetch_all(&state().db)
-        .await?;
+    let results = query.fetch_all(&state().db).await?;
 
     Ok(results)
 }
