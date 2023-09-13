@@ -10,12 +10,24 @@ pub struct AccountsApi;
 #[OpenApi]
 impl AccountsApi {
     #[oai(path = "/account", method = "get")]
-    async fn read(&self, req: &Request) -> Result<Json<Vec<Account>>> {
+    async fn read(&self, req: &Request) -> Result<Json<AccountsResponse>> {
         let filter = req.params::<AccountFilter>()?;
-        let accounts = read(filter).await.map_err(BadRequest)?;
+        let mut accounts = read(filter).await.map_err(BadRequest)?;
 
-        Ok(Json(accounts))
+        let eof = accounts.len() <= PAGE_SIZE as usize;
+        if !eof {
+            accounts.pop();
+        };
+        let res = AccountsResponse { eof, accounts };
+
+        Ok(Json(res))
     }
+}
+
+#[derive(Debug, Object)]
+pub struct AccountsResponse {
+    pub eof: bool,
+    pub accounts: Vec<Account>,
 }
 
 #[derive(Debug, FromRow, Object)]
@@ -135,7 +147,7 @@ pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
         query.push("last_name ASC");
     }
     query
-        .push(format!(" LIMIT {} OFFSET ", PAGE_SIZE))
+        .push(format!(" LIMIT {} OFFSET ", PAGE_SIZE + 1))
         .push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as();

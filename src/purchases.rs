@@ -35,8 +35,8 @@ impl PurchasesApi {
 
 #[derive(Debug, Object)]
 pub struct PurhcasesResponse {
-    pub purchases: Vec<Purchase>,
     pub eof: bool,
+    pub purchases: Vec<Purchase>,
 }
 
 #[derive(Debug, Object)]
