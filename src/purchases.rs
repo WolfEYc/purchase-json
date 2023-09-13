@@ -1,4 +1,5 @@
 use crate::{state::state, PAGE_SIZE};
+use chrono::NaiveTime;
 use poem::{http::StatusCode, Request, Result};
 use poem_openapi::{payload::Json, Object, OpenApi};
 use serde::Deserialize;
@@ -16,14 +17,26 @@ pub struct PurchasesApi;
 #[OpenApi]
 impl PurchasesApi {
     #[oai(path = "/purchase", method = "get")]
-    async fn read(&self, req: &Request) -> Result<Json<Vec<Purchase>>> {
+    async fn read(&self, req: &Request) -> Result<Json<PurhcasesResponse>> {
         let filter = req.params::<PurchaseFilter>()?;
-        let purchases = read(filter)
+        let mut purchases = read(filter)
             .await
             .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
 
-        Ok(Json(purchases))
+        let eof = purchases.len() <= PAGE_SIZE as usize;
+        if !eof {
+            purchases.pop();
+        };
+        let res = PurhcasesResponse { eof, purchases };
+
+        Ok(Json(res))
     }
+}
+
+#[derive(Debug, Object)]
+pub struct PurhcasesResponse {
+    pub purchases: Vec<Purchase>,
+    pub eof: bool,
 }
 
 #[derive(Debug, Object)]
@@ -71,7 +84,8 @@ pub struct PurchaseRow {
 #[derive(Debug, Deserialize)]
 pub struct PurchaseFilter {
     pub account_number: Option<i64>,
-    pub purchase_datetime: Option<NaiveDateTime>,
+    pub purchase_date: Option<NaiveDate>,
+    pub purchase_time: Option<NaiveTime>,
     pub purchase_amount: Option<f64>,
     pub post_date: Option<NaiveDate>,
     pub purchase_number: Option<i32>,
@@ -125,7 +139,11 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
 
     query.push(" ORDER BY ");
     let mut seperated = query.separated(", ");
-    if let Some(purchase_datetime) = &filter.purchase_datetime {
+    if let Some(purchase_date) = &filter.purchase_date {
+        let purchase_datetime = match &filter.purchase_time {
+            Some(time) => purchase_date.and_time(*time),
+            None => purchase_date.and_time(NaiveTime::MIN),
+        };
         seperated
             .push("ABS(EXTRACT(EPOCH FROM (purchase_datetime - ")
             .push_bind_unseparated(purchase_datetime)
@@ -148,7 +166,7 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
     }
 
     query
-        .push(format!(" LIMIT {} OFFSET ", PAGE_SIZE))
+        .push(format!(" LIMIT {} OFFSET ", PAGE_SIZE + 1))
         .push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as::<PurchaseRow>();
