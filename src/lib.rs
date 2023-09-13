@@ -1,5 +1,5 @@
-pub mod state;
 pub mod accounts;
 pub mod purchases;
+pub mod state;
 
-const PAGE_SIZE: i64 = 10;
+const PAGE_SIZE: i64 = 30;

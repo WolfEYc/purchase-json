@@ -49,7 +49,6 @@ pub struct AccountFilter {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub page: i64,
-    pub lookahead: i64,
 }
 
 pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
@@ -136,10 +135,7 @@ pub async fn read(filter: AccountFilter) -> Result<Vec<Account>, sqlx::Error> {
         query.push("last_name ASC");
     }
     query
-        .push(format!(
-            " LIMIT {} OFFSET ",
-            (filter.lookahead + 1) * PAGE_SIZE
-        ))
+        .push(format!(" LIMIT {} OFFSET ", PAGE_SIZE))
         .push_bind(filter.page * PAGE_SIZE);
 
     let query = query.build_query_as();
