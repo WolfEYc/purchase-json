@@ -87,6 +87,7 @@ pub struct PurchaseFilter {
     pub purchase_date: Option<NaiveDate>,
     pub purchase_time: Option<NaiveTime>,
     pub purchase_amount: Option<f64>,
+    pub outliers: Option<bool>,
     pub post_date: Option<NaiveDate>,
     pub purchase_number: Option<i32>,
     pub merchant_number: Option<String>,
@@ -97,44 +98,47 @@ pub struct PurchaseFilter {
 }
 
 pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
-    let mut query: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM purchase WHERE ");
+    let mut query: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM purchase p WHERE ");
 
     let mut seperated = query.separated(" AND ");
     if let Some(account_number) = &filter.account_number {
         seperated
-            .push("account_number = ")
+            .push("p.account_number = ")
             .push_bind_unseparated(account_number);
     }
     if let Some(purchase_number) = &filter.purchase_number {
         seperated
-            .push("purchase_number = ")
+            .push("p.purchase_number = ")
             .push_bind_unseparated(purchase_number);
     }
     if let Some(merchant_state) = &filter.merchant_state {
         seperated
-            .push("merchant_state = ")
+            .push("p.merchant_state = ")
             .push_bind_unseparated(merchant_state);
     }
     if let Some(merchant_category_code) = &filter.merchant_category_code {
         seperated
-            .push("merchant_category_code = ")
+            .push("p.merchant_category_code = ")
             .push_bind_unseparated(merchant_category_code);
     }
     if let Some(merchant_number) = &filter.merchant_number {
         seperated
-            .push("LOWER(merchant_number) LIKE '%' || ")
+            .push(" LOWER(p.merchant_number) LIKE '%' || ")
             .push_bind_unseparated(merchant_number.to_lowercase())
             .push_unseparated(" || '%'");
     }
     if let Some(merchant_name) = &filter.merchant_name {
         seperated
-            .push("LOWER(merchant_name) LIKE '%' || ")
+            .push(" LOWER(p.merchant_name) LIKE '%' || ")
             .push_bind_unseparated(merchant_name.to_lowercase())
             .push_unseparated(" || '%'");
     }
 
     if query.sql().ends_with("WHERE ") {
-        query = QueryBuilder::new("SELECT * FROM purchase");
+        query = QueryBuilder::new("SELECT * FROM purchase p");
+    }
+    if let Some(true) = &filter.outliers {
+        query.push(" JOIN outliers o ON o.account_number = p.account_number AND o.purchase_number = p.purchase_number");
     }
 
     query.push(" ORDER BY ");
@@ -160,6 +164,8 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
             .push("ABS(purchase_amount - ")
             .push_bind_unseparated(purchase_amount)
             .push_unseparated(") ASC");
+    } else if filter.outliers.is_some() {
+        seperated.push("ABS(purchase_amount) DESC");
     }
     if query.sql().ends_with("ORDER BY ") {
         query.push("purchase_datetime DESC");
