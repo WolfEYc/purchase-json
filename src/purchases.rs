@@ -1,6 +1,6 @@
 use crate::{state::state, PAGE_SIZE};
 use chrono::NaiveTime;
-use poem::{http::StatusCode, Request, Result};
+use poem::{http::StatusCode, web::Query, Result};
 use poem_openapi::{payload::Json, Object, OpenApi};
 use serde::Deserialize;
 use sqlx::{
@@ -17,8 +17,7 @@ pub struct PurchasesApi;
 #[OpenApi]
 impl PurchasesApi {
     #[oai(path = "/purchase", method = "get")]
-    async fn read(&self, req: &Request) -> Result<Json<PurhcasesResponse>> {
-        let filter = req.params::<PurchaseFilter>()?;
+    async fn read(&self, Query(filter): Query<PurchaseFilter>) -> Result<Json<PurhcasesResponse>> {
         let mut purchases = read(filter)
             .await
             .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::BAD_REQUEST))?;
@@ -88,6 +87,7 @@ pub struct PurchaseFilter {
     pub purchase_time: Option<NaiveTime>,
     pub purchase_amount: Option<f64>,
     pub outliers: Option<bool>,
+    pub interstate: Option<bool>,
     pub post_date: Option<NaiveDate>,
     pub purchase_number: Option<i32>,
     pub merchant_number: Option<String>,
@@ -98,8 +98,15 @@ pub struct PurchaseFilter {
 }
 
 pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
-    let mut query: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM purchase p WHERE ");
+    let mut query: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM purchase p");
+    if let Some(true) = &filter.outliers {
+        query.push(" JOIN outliers o ON o.account_number = p.account_number AND o.purchase_number = p.purchase_number");
+    }
+    if let Some(true) = &filter.interstate {
+        query.push(" JOIN account a ON a.account_number = p.account_number AND a.account_state != p.merchant_state");
+    }
 
+    query.push(" WHERE ");
     let mut seperated = query.separated(" AND ");
     if let Some(account_number) = &filter.account_number {
         seperated
@@ -135,12 +142,8 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
     }
 
     if query.sql().ends_with("WHERE ") {
-        query = QueryBuilder::new("SELECT * FROM purchase p");
+        query = QueryBuilder::new(query.sql().replace("WHERE ", ""));
     }
-    if let Some(true) = &filter.outliers {
-        query.push(" JOIN outliers o ON o.account_number = p.account_number AND o.purchase_number = p.purchase_number");
-    }
-
     query.push(" ORDER BY ");
     let mut seperated = query.separated(", ");
     if let Some(purchase_date) = &filter.purchase_date {
@@ -149,26 +152,26 @@ pub async fn read(filter: PurchaseFilter) -> color_eyre::Result<Vec<Purchase>> {
             None => purchase_date.and_time(NaiveTime::MIN),
         };
         seperated
-            .push("ABS(EXTRACT(EPOCH FROM (purchase_datetime - ")
+            .push("ABS(EXTRACT(EPOCH FROM (p.purchase_datetime - ")
             .push_bind_unseparated(purchase_datetime)
             .push_unseparated("))) ASC");
     }
     if let Some(post_date) = &filter.post_date {
         seperated
-            .push("ABS(post_date - ")
+            .push("ABS(p.post_date - ")
             .push_bind_unseparated(post_date)
             .push_unseparated(") ASC");
     }
     if let Some(purchase_amount) = &filter.purchase_amount {
         seperated
-            .push("ABS(purchase_amount - ")
+            .push("ABS(p.purchase_amount - ")
             .push_bind_unseparated(purchase_amount)
             .push_unseparated(") ASC");
     } else if filter.outliers.is_some() {
-        seperated.push("ABS(purchase_amount) DESC");
+        seperated.push("ABS(p.purchase_amount) DESC");
     }
     if query.sql().ends_with("ORDER BY ") {
-        query.push("purchase_datetime DESC");
+        query.push("p.purchase_datetime DESC");
     }
 
     query
